@@ -1,0 +1,19 @@
+db:
+  host: localhost
+  user: ticket
+  password: secret
+  database: ticket
+
+ignored-period: 3600
+
+whatsapp:
+  messagebird:
+    sendUrl: https://conversations.messagebird.com/v1/send
+    channel: 12345678901234567890123456789012
+    namespace: 12345678_1234_1234_1234_123456789012
+    accessKey: abcdefghijklmnopqrstuvwxy
+
+  feedback:
+    sendUrl: https://feedback.nusa.net.id/question
+    question: Yth, pelanggan Nusanet, mohon beri penilaian untuk pelayanan staff kami!
+

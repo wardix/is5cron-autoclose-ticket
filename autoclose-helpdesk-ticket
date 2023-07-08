@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+
+import pymysql
+import datetime
+import yaml
+import argparse
+import requests
+import json
+
+REQUEST_TYPE = 1
+INCIDENT_TYPE = 2
+
+
+def get_solved_ticket(cursor, ticket_type_list):
+    sql = """
+        SELECT tu.TtsId, tu.UpdatedTime, t.TtsTypeId, t.CustId
+        FROM TtsUpdate tu
+        LEFT JOIN Tts t ON tu.TtsId = t.TtsId
+        LEFT JOIN Employee e ON t.EmpId = e.EmpId
+        WHERE t.TtsTypeId IN ({})
+            AND tu.Status = 'Call'
+            AND t.Status = 'Call'
+            AND t.AssignedNo = 0
+            AND IFNULL(e.DisplayBranchId, e.BranchId) IN ('020')
+        ORDER BY tu.TtsId, tu.UpdatedTime DESC
+    """.format(
+        ",".join(["%s"] * len(ticket_type_list))
+    )
+    cursor.execute(sql, ticket_type_list)
+    result = cursor.fetchall()
+    proceeded = {}
+    solved_ticket = []
+    for row in result:
+        ticket_id = row[0]
+        if ticket_id in proceeded:
+            continue
+        proceeded[ticket_id] = True
+        solved_ticket.append(row)
+    return solved_ticket
+
+
+def insert_closed_ticket_update(cursor, ticket_id, update_time):
+    fields = (
+        "TtsId",
+        "UpdatedTime",
+        "ActionStart",
+        "ActionBegin",
+        "ActionEnd",
+        "ActionStop",
+        "EmpId",
+        "Note",
+        "AssignedNo",
+        "Status",
+    )
+    sql = """
+        INSERT INTO TtsUpdate ({})
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """.format(
+        ", ".join(fields)
+    )
+    data = (
+        ticket_id,
+        update_time,
+        update_time,
+        update_time,
+        update_time,
+        update_time,
+        "SYSTEM",
+        "Closed by SYSTEM",
+        0,
+        "Call",
+    )
+    cursor.execute(sql, data)
+    return cursor.lastrowid
+
+
+def insert_closed_ticket_change(cursor, update_id):
+    fields = ("TtsUpdateId", "field", "OldValue", "NewValue")
+    sql = """
+        INSERT INTO TtsChange ({})
+        VALUES (%s, %s, %s, %s)
+    """.format(
+        ", ".join(fields)
+    )
+    data = (update_id, "Status", "Call", "Closed")
+    cursor.execute(sql, data)
+    data = (update_id, "SolvedBy", "", "helpdesk")
+    cursor.execute(sql, data)
+
+
+def update_closed_ticket(cursor, ticket_id):
+    sql = "UPDATE Tts SET Visited = %s, Status = %s, SolvedBy = %s WHERE TtsId = %s"
+    data = (0, "Closed", "helpdesk", ticket_id)
+    cursor.execute(sql, data)
+
+
+def get_contact_ticket(cursor, ticket_id):
+    sql = "SELECT ContactNo FROM TtsContact WHERE TtsId = %s LIMIT 1"
+    data = (ticket_id,)
+    cursor.execute(sql, data)
+    row = cursor.fetchone()
+    return "" if not row else row[0]
+
+
+def send_messagebird_feedback(destination, config):
+    headers = {
+        "Authorization": f"AccessKey {config['accessKey']}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "type": "hsm",
+        "to": destination,
+        "from": config["channel"],
+        "content": {
+            "hsm": {
+                "namespace": config["namespace"],
+                "templateName": "feedback_score_v01",
+                "language": {"policy": "deterministic", "code": "id"},
+                "params": [],
+            }
+        },
+    }
+
+    response = requests.post(
+        config["sendUrl"], headers=headers, data=json.dumps(payload)
+    )
+    return response.status_code
+
+
+def save_send_feedback(config, phone, ticket_id, update_id, assigned_no, customer_id):
+    data = {
+        "destination": phone,
+        "question": config["question"],
+        "customer_id": customer_id,
+        "ticket_id": ticket_id,
+        "tts_update_id": update_id,
+        "assigned_no": assigned_no,
+    }
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    requests.post(config["sendUrl"], headers=headers, data=json.dumps(data))
+
+
+def send_whatsapp_feedback(config, cursor, ticket_id, update_id, customer_id):
+    contact = get_contact_ticket(cursor, ticket_id)
+    if not contact:
+        return
+    destination_no = (
+        contact[1:]
+        if contact.startswith("+")
+        else "62" + contact[1:]
+        if contact.startswith("0")
+        else contact
+    )
+    messagebird_response = send_messagebird_feedback(
+        destination_no, config["messagebird"]
+    )
+    if messagebird_response < 200 or messagebird_response > 299:
+        return
+    save_send_feedback(
+        config["feedback"], destination_no, customer_id, ticket_id, update_id, 0
+    )
+
+
+def process_tickets(config):
+    cnx = pymysql.connect(
+        host=config["db"]["host"],
+        user=config["db"]["user"],
+        password=config["db"]["password"],
+        database=config["db"]["database"],
+    )
+    with cnx.cursor() as cursor:
+        solved_ticket = get_solved_ticket(cursor, (REQUEST_TYPE, INCIDENT_TYPE))
+
+        now = datetime.datetime.now()
+        for ticket in solved_ticket:
+            ticket_id, updated_time, ticket_type, customer_id = ticket
+            if (
+                updated_time + datetime.timedelta(seconds=config["ignored-period"])
+                > now
+            ):
+                continue
+            update_id = insert_closed_ticket_update(cursor, ticket_id, now)
+            insert_closed_ticket_change(cursor, update_id)
+            update_closed_ticket(cursor, ticket_id)
+
+            if ticket_type == REQUEST_TYPE:
+                continue
+
+            send_whatsapp_feedback(
+                config["whatsapp"], cursor, ticket_id, update_id, customer_id
+            )
+
+    cnx.commit()
+    cnx.close()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", help="Path to the config.yaml file", required=True)
+    args = parser.parse_args()
+
+    config_file = args.config or "config.yaml"
+
+    with open(config_file, "r") as f:
+        config = yaml.safe_load(f)
+    process_tickets(config)
+
+
+if __name__ == "__main__":
+    main()
