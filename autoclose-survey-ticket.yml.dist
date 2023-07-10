@@ -1,0 +1,7 @@
+db:
+  host: kyiv.nusa.net.id
+  user: ticket
+  password: secret
+  database: ticket
+
+ignored-period: 3600

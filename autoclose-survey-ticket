@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+
+import pymysql
+import datetime
+import yaml
+import argparse
+
+
+def get_solved_ticket(cursor):
+    sql = """
+        SELECT tu.TtsId, tu.UpdatedTime, t.CustServId
+        FROM TtsUpdate tu
+        LEFT JOIN Tts t ON tu.TtsId = t.TtsId
+        LEFT JOIN Employee e ON t.EmpId = e.EmpId
+        WHERE t.TtsTypeId = 5
+            AND tu.Status = 'Call'
+            AND t.Status = 'Call'
+            AND IFNULL(e.DisplayBranchId, e.BranchId) IN ('020')
+        ORDER BY tu.TtsId, tu.UpdatedTime DESC
+    """
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    proceeded = {}
+    solved_ticket = []
+    for row in result:
+        ticket_id = row[0]
+        if ticket_id in proceeded:
+            continue
+        proceeded[ticket_id] = True
+        solved_ticket.append(row)
+    return solved_ticket
+
+
+def get_ticket_assigned(cursor, ticket_id):
+    sql = """
+        SELECT AssignedNo FROM TtsPIC WHERE TtsId = %s
+        ORDER BY AssignedNo DESC LIMIT 1
+    """
+    cursor.execute(sql, (ticket_id,))
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+    return 0
+
+
+def insert_closed_ticket_update(
+    cursor, ticket_id, update_time, employee_id, action, note, assigned_no
+):
+    sql = """
+        INSERT INTO TtsUpdate (
+            TtsId,
+            UpdatedTime,
+            ActionStart,
+            ActionBegin,
+            ActionEnd,
+            ActionStop,
+            EmpId,
+            Action,
+            Note,
+            AssignedNo,
+            Status
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Call')
+    """
+    data = (
+        ticket_id,
+        update_time,
+        update_time,
+        update_time,
+        update_time,
+        update_time,
+        employee_id,
+        action,
+        note,
+        assigned_no,
+    )
+
+    cursor.execute(sql, data)
+    return cursor.lastrowid
+
+
+def insert_closed_ticket_change(cursor, update_id):
+    sql = """
+        INSERT INTO TtsChange (TtsUpdateId, field, OldValue, NewValue)
+        VALUES (%s, %s, %s, %s)
+    """
+    data = (update_id, "Status", "Call", "Closed")
+    cursor.execute(sql, data)
+
+
+def update_closed_ticket(cursor, ticket_id):
+    sql = "UPDATE Tts SET Visited = %s, Status = %s, SolvedBy = %s WHERE TtsId = %s"
+    data = (1, "Closed", "", ticket_id)
+    cursor.execute(sql, data)
+
+
+def update_ticket_survey(cursor, ticket_id, success_status):
+    sql = "UPDATE TtsSurvey SET IsSuccess = %s WHERE TtsId = %s"
+    cursor.execute(sql, (success_status, ticket_id))
+
+
+def get_ticket_pic(cursor, ticket_id, assigned_no):
+    sql = "SELECT EmpId FROM TtsPIC WHERE TtsId = %s AND AssignedNo = %s"
+    cursor.execute(sql, (ticket_id, assigned_no))
+    result = cursor.fetchall()
+    pic = []
+    for row in result:
+        pic.append(row[0])
+    return pic
+
+
+def insert_ticket_score(
+    cursor, update_id, employee_id, score, description, updated_time
+):
+    sql = """
+        INSERT INTO TtsAdjust (
+            TtsUpdateId, EmpId, Score, Description, InsertBy, InsertDateTime
+        )
+        VALUES (%s, %s, %s, %s, 'System', %s)
+    """
+    data = (update_id, employee_id, score, description, updated_time)
+    cursor.execute
+
+
+def process_tickets(config):
+    cnx = pymysql.connect(
+        host=config["db"]["host"],
+        user=config["db"]["user"],
+        password=config["db"]["password"],
+        database=config["db"]["database"],
+    )
+    with cnx.cursor() as cursor:
+        solved_ticket = get_solved_ticket(cursor)
+        now = datetime.datetime.now()
+        for ticket in solved_ticket:
+            ticket_id, updated_time, subscription_id = ticket
+            if (
+                updated_time + datetime.timedelta(seconds=config["ignored-period"])
+                > now
+            ):
+                continue
+            if 0 < subscription_id:
+                action = ""
+                success_status = 1
+            else:
+                action = "tidak jadi pasang"
+                success_status = 0
+
+            assigned_no = get_ticket_assigned(cursor, ticket_id)
+            pic = get_ticket_pic(cursor, ticket_id, assigned_no)
+            update_id = insert_closed_ticket_update(
+                cursor,
+                ticket_id,
+                updated_time,
+                "SYSTEM",
+                action,
+                "closed by SYSTEM",
+                assigned_no,
+            )
+            insert_closed_ticket_change(cursor, update_id)
+            update_closed_ticket(cursor, ticket_id)
+            update_ticket_survey(cursor, ticket_id, success_status)
+            for employee_id in pic:
+                insert_ticket_score(
+                    cursor,
+                    update_id,
+                    employee_id,
+                    0,
+                    "Auto adjusted: Closed Ticket",
+                    updated_time,
+                )
+
+    cnx.commit()
+    cnx.close()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", help="Path to the config.yaml file", required=True)
+    args = parser.parse_args()
+
+    config_file = args.config or "config.yaml"
+
+    with open(config_file, "r") as f:
+        config = yaml.safe_load(f)
+    process_tickets(config)
+
+
+if __name__ == "__main__":
+    main()
