@@ -18,7 +18,6 @@ def get_solved_ticket(cursor, ticket_type_list):
         LEFT JOIN Tts t ON tu.TtsId = t.TtsId
         LEFT JOIN Employee e ON t.EmpId = e.EmpId
         WHERE t.TtsTypeId IN ({})
-            AND tu.Status = 'Call'
             AND t.Status = 'Call'
             AND t.AssignedNo = 0
             AND IFNULL(e.DisplayBranchId, e.BranchId) IN ('020')
