@@ -40,23 +40,22 @@ def get_solved_ticket(cursor, ticket_type_list):
 
 def insert_closed_ticket_update(cursor, ticket_id, update_time):
     fields = (
-        "TtsId",
-        "UpdatedTime",
-        "ActionStart",
-        "ActionBegin",
-        "ActionEnd",
-        "ActionStop",
-        "EmpId",
-        "Note",
-        "AssignedNo",
-        "Status",
     )
     sql = """
-        INSERT INTO TtsUpdate ({})
+        INSERT INTO TtsUpdate (
+            TtsId,
+            UpdatedTime,
+            ActionStart,
+            ActionBegin,
+            ActionEnd,
+            ActionStop,
+            EmpId,
+            Note,
+            AssignedNo,
+            Status
+        )
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """.format(
-        ", ".join(fields)
-    )
+    """
     data = (
         ticket_id,
         update_time,
@@ -74,13 +73,12 @@ def insert_closed_ticket_update(cursor, ticket_id, update_time):
 
 
 def insert_closed_ticket_change(cursor, update_id):
-    fields = ("TtsUpdateId", "field", "OldValue", "NewValue")
     sql = """
-        INSERT INTO TtsChange ({})
+        INSERT INTO TtsChange (
+            TtsUpdateId, field, OldValue, NewValue
+        )
         VALUES (%s, %s, %s, %s)
-    """.format(
-        ", ".join(fields)
-    )
+    """
     data = (update_id, "Status", "Call", "Closed")
     cursor.execute(sql, data)
     data = (update_id, "SolvedBy", "", "helpdesk")
