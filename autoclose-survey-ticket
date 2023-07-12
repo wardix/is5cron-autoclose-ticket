@@ -99,16 +99,6 @@ def update_ticket_survey(cursor, ticket_id, success_status):
     cursor.execute(sql, (success_status, ticket_id))
 
 
-def get_ticket_pic(cursor, ticket_id, assigned_no):
-    sql = "SELECT EmpId FROM TtsPIC WHERE TtsId = %s AND AssignedNo = %s"
-    cursor.execute(sql, (ticket_id, assigned_no))
-    result = cursor.fetchall()
-    pic = []
-    for row in result:
-        pic.append(row[0])
-    return pic
-
-
 def process_tickets(config):
     cnx = pymysql.connect(
         host=config["db"]["host"],
@@ -134,7 +124,6 @@ def process_tickets(config):
                 success_status = 0
 
             assigned_no = get_ticket_assigned(cursor, ticket_id)
-            pic = get_ticket_pic(cursor, ticket_id, assigned_no)
             update_id = insert_closed_ticket_update(
                 cursor,
                 ticket_id,
