@@ -109,19 +109,6 @@ def get_ticket_pic(cursor, ticket_id, assigned_no):
     return pic
 
 
-def insert_ticket_score(
-    cursor, update_id, employee_id, score, description, updated_time
-):
-    sql = """
-        INSERT INTO TtsAdjust (
-            TtsUpdateId, EmpId, Score, Description, InsertBy, InsertDateTime
-        )
-        VALUES (%s, %s, %s, %s, 'System', %s)
-    """
-    data = (update_id, employee_id, score, description, updated_time)
-    cursor.execute
-
-
 def process_tickets(config):
     cnx = pymysql.connect(
         host=config["db"]["host"],
@@ -160,15 +147,6 @@ def process_tickets(config):
             insert_closed_ticket_change(cursor, update_id)
             update_closed_ticket(cursor, ticket_id)
             update_ticket_survey(cursor, ticket_id, success_status)
-            for employee_id in pic:
-                insert_ticket_score(
-                    cursor,
-                    update_id,
-                    employee_id,
-                    0,
-                    "Auto adjusted: Closed Ticket",
-                    updated_time,
-                )
 
     cnx.commit()
     cnx.close()
