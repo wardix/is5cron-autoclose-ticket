@@ -13,7 +13,6 @@ def get_solved_ticket(cursor):
         LEFT JOIN Tts t ON tu.TtsId = t.TtsId
         LEFT JOIN Employee e ON t.EmpId = e.EmpId
         WHERE t.TtsTypeId = 5
-            AND tu.Status = 'Call'
             AND t.Status = 'Call'
             AND IFNULL(e.DisplayBranchId, e.BranchId) IN ('020')
         ORDER BY tu.TtsId, tu.UpdatedTime DESC
