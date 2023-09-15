@@ -40,19 +40,17 @@ def get_solved_ticket(cursor, ticket_type_list):
 
 def insert_closed_ticket_update(cursor, ticket_id, update_time):
     sql = """
-        INSERT INTO TtsUpdate (
-            TtsId,
-            UpdatedTime,
-            ActionStart,
-            ActionBegin,
-            ActionEnd,
-            ActionStop,
-            EmpId,
-            Note,
-            AssignedNo,
-            Status
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO TtsUpdate SET
+            TtsId = %s,
+            UpdatedTime = %s,
+            ActionStart = %s,
+            ActionBegin = %s,
+            ActionEnd = %s,
+            ActionStop = %s,
+            EmpId = %s,
+            Note = %s,
+            AssignedNo = %s,
+            Status = %s
     """
     data = (
         ticket_id,
