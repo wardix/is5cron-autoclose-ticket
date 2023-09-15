@@ -6,6 +6,17 @@ import yaml
 import argparse
 import requests
 import json
+import logging
+from logging.handlers import SysLogHandler
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+syslog_handler = SysLogHandler(address='/dev/log')
+formatter = logging.Formatter('%(name)s: %(levelname)s %(message)s')
+syslog_handler.setFormatter(formatter)
+
+logger.addHandler(syslog_handler)
 
 REQUEST_TYPE = 1
 INCIDENT_TYPE = 2
@@ -117,7 +128,9 @@ def send_messagebird_feedback(destination, config):
     response = requests.post(
         config["sendUrl"], headers=headers, data=json.dumps(payload)
     )
-    return response.status_code
+    response_code = response.status_code
+    logger.info(f"send_messagebird_feedback({destination}) - {response_code}")
+    return response_code
 
 
 def save_send_feedback(config, phone, ticket_id, update_id, assigned_no, customer_id):
