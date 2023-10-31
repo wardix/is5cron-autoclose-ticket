@@ -153,11 +153,11 @@ def send_whatsapp_feedback(config, cursor, customer_id, ticket_id, update_id, as
     if not contact:
         return
     destination_no = (
-        contact[1:]
+        contact
         if contact.startswith("+")
-        else "62" + contact[1:]
+        else "+62" + contact[1:]
         if contact.startswith("0")
-        else contact
+        else "+" + contact
     )
     messagebird_response = send_messagebird_feedback(
         destination_no, config["messagebird"]
