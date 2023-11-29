@@ -10,7 +10,7 @@ import json
 REQUEST_TICKET = 1
 INCIDENT_TICKET = 2
 
-HELPDESK_DEPT = {"01", "17"}
+HELPDESK_DEPT = {"01", "17", "29", "34"}
 ENGINEER_DEPT = {"04"}
 
 
