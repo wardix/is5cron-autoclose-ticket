@@ -133,6 +133,35 @@ def send_messagebird_feedback(destination, config):
     return response_code
 
 
+def send_nusacontact_feedback(destination, config):
+    headers = {
+        "X-Api-Key": f"{config['apiKey']}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": destination,
+        "type": "template",
+        "template": {
+            "namespace": config["namespace"],
+            "name": "feedback_score_v01",
+            "language": {
+                "code": "id"
+            },
+            "components": [{
+                    "type": "body",
+                    "parameters": []
+            }]
+        }
+    }
+
+    response = requests.post(
+        config["sendUrl"], headers=headers, data=json.dumps(payload)
+    )
+    return response.status_code
+
+
 def save_send_feedback(config, phone, customer_id, ticket_id, update_id, assigned_no):
     data = {
         "destination": phone,
@@ -159,10 +188,10 @@ def send_whatsapp_feedback(config, cursor, customer_id, ticket_id, update_id, as
         if contact.startswith("0")
         else "+" + contact
     )
-    messagebird_response = send_messagebird_feedback(
-        destination_no, config["messagebird"]
+    send_response = send_nusacontact_feedback(
+        destination_no, config["nusacontact"]
     )
-    if messagebird_response < 200 or messagebird_response > 299:
+    if send_response < 200 or send_response > 299:
         return
     save_send_feedback(
         config["feedback"], destination_no, customer_id, ticket_id, update_id, assigned_no

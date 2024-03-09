@@ -13,6 +13,11 @@ whatsapp:
     namespace: 12345678_1234_1234_1234_123456789012
     accessKey: abcdefghijklmnopqrstuvwxy
 
+  nusacontact:
+    sendUrl: https://nwc.nusa.net.id/api/messages
+    namespace: 12345678_1234_1234_1234_123456789012
+    apiKey: abcdefghijklmnopqrstuvwxy
+
   feedback:
     sendUrl: https://feedback.nusa.net.id/question
     question: Yth, pelanggan Nusanet, mohon beri penilaian untuk pelayanan staff kami!
