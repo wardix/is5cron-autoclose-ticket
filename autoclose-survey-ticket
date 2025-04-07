@@ -8,10 +8,11 @@ import argparse
 
 def get_solved_ticket(cursor):
     sql = """
-        SELECT tu.TtsId, tu.UpdatedTime, t.CustServId
+        SELECT tu.TtsId, tu.UpdatedTime, t.CustServId, t.VcId, cs.contactIdT2T
         FROM TtsUpdate tu
         LEFT JOIN Tts t ON tu.TtsId = t.TtsId
         LEFT JOIN Employee e ON t.EmpId = e.EmpId
+        LEFT JOIN CustomerServices cs on cs.CustServId = t.CustServId
         WHERE t.TtsTypeId = 5
             AND t.Status = 'Call'
             AND IFNULL(e.DisplayBranchId, e.BranchId) IN ('020')
@@ -97,6 +98,22 @@ def update_ticket_survey(cursor, ticket_id, success_status):
     sql = "UPDATE TtsSurvey SET IsSuccess = %s WHERE TtsId = %s"
     cursor.execute(sql, (success_status, ticket_id))
 
+def process_sync_t2t(ticket_id, update_id, contact_id, config):
+    headers = {
+        "X-Api-Key": f"{config['is']['apiKey']}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "ttsId": ticket_id,
+        "ttsUpdateId": update_id,
+        "contactIdT2T": contact_id,
+    }
+
+    response = requests.post(
+        config["is"]["syncT2TUrl"], headers=headers, data=json.dumps(payload)
+    )
+    return response.status_code
+
 
 def process_tickets(config):
     cnx = pymysql.connect(
@@ -109,7 +126,7 @@ def process_tickets(config):
         solved_ticket = get_solved_ticket(cursor)
         now = datetime.datetime.now()
         for ticket in solved_ticket:
-            ticket_id, updated_time, subscription_id = ticket
+            ticket_id, updated_time, subscription_id, vc_id, contact_id_t2t = ticket
             if (
                 updated_time + datetime.timedelta(seconds=config["ignored-period"])
                 > now
@@ -135,6 +152,9 @@ def process_tickets(config):
             insert_closed_ticket_change(cursor, update_id)
             update_closed_ticket(cursor, ticket_id)
             update_ticket_survey(cursor, ticket_id, success_status)
+
+            if vc_id:
+                process_sync_t2t(ticket_id, update_id, contact_id_t2t, config)
 
     cnx.commit()
     cnx.close()

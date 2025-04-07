@@ -24,10 +24,11 @@ INCIDENT_TYPE = 2
 
 def get_solved_ticket(cursor, ticket_type_list):
     sql = """
-        SELECT tu.TtsId, tu.UpdatedTime, t.TtsTypeId, t.CustId
+        SELECT tu.TtsId, tu.UpdatedTime, t.TtsTypeId, t.CustId, t.AssignedNo, t.VcId, cs.contactIdT2T
         FROM TtsUpdate tu
         LEFT JOIN Tts t ON tu.TtsId = t.TtsId
         LEFT JOIN Employee e ON t.EmpId = e.EmpId
+        LEFT JOIN CustomerServices cs on cs.CustServId = t.CustServId
         WHERE t.TtsTypeId IN ({})
             AND t.Status = 'Call'
             AND t.AssignedNo = 0
@@ -197,6 +198,22 @@ def send_whatsapp_feedback(config, cursor, customer_id, ticket_id, update_id, as
         config["feedback"], destination_no, customer_id, ticket_id, update_id, assigned_no
     )
 
+def process_sync_t2t(ticket_id, update_id, contact_id, config):
+    headers = {
+        "X-Api-Key": f"{config['is']['apiKey']}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "ttsId": ticket_id,
+        "ttsUpdateId": update_id,
+        "contactIdT2T": contact_id,
+    }
+
+    response = requests.post(
+        config["is"]["syncT2TUrl"], headers=headers, data=json.dumps(payload)
+    )
+    return response.status_code
+
 
 def process_tickets(config):
     cnx = pymysql.connect(
@@ -210,7 +227,7 @@ def process_tickets(config):
 
         now = datetime.datetime.now()
         for ticket in solved_ticket:
-            ticket_id, updated_time, ticket_type, customer_id = ticket
+            ticket_id, updated_time, ticket_type, customer_id, assigned_no, vc_id, contact_id_t2t = ticket
             if (
                 updated_time + datetime.timedelta(seconds=config["ignored-period"])
                 > now
@@ -219,6 +236,9 @@ def process_tickets(config):
             update_id = insert_closed_ticket_update(cursor, ticket_id, now)
             insert_closed_ticket_change(cursor, update_id)
             update_closed_ticket(cursor, ticket_id)
+
+            if vc_id:
+                process_sync_t2t(ticket_id, update_id, contact_id_t2t, config)
 
             if ticket_type == REQUEST_TYPE:
                 continue
