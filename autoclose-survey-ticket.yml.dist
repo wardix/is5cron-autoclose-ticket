@@ -5,3 +5,7 @@ db:
   database: ticket
 
 ignored-period: 3600
+
+is:
+  syncT2TUrl: https://isx.nusa.net.id/v2/tts/ticket/sync-t2t
+  apiKey: secret

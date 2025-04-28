@@ -23,3 +23,7 @@ whatsapp:
   feedback:
     sendUrl: https://feedback.nusa.net.id/question
     question: Yth, pelanggan Nusanet, mohon beri penilaian untuk pelayanan staff kami!
+
+is:
+  syncT2TUrl: https://isx.nusa.net.id/v2/tts/ticket/sync-t2t
+  apiKey: secret
